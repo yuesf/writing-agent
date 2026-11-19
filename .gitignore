@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Android build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/capacitor-cordova-android-plugins/
+
+# Native IDE / OS junk
+.DS_Store
+Thumbs.db
+*.iml
+
+# Secrets & local env — never commit
+.env
+.env.*
+*.keystore
+!debug.keystore
+
+# Logs
+*.log
+npm-debug.log*
