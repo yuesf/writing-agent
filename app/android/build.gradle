@@ -3,6 +3,9 @@
 buildscript {
     
     repositories {
+        // 国内网络无法直连 dl.google.com，优先走阿里云镜像；google()/mavenCentral() 作为兜底
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
     }
@@ -19,6 +22,8 @@ apply from: "variables.gradle"
 
 allprojects {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
     }

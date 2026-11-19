@@ -17,7 +17,7 @@
 - embedding 检索（v2，`prompt.ts` 的 `pickAssets` 当前用标签相关性降级）
 - 回路 2/3 全流程（反馈蒸馏、Rubric 校准、复盘报告）——v1 已埋事件数据
 - 对标文章的风格资产化自动拆解（管线 B）——当前对标仅打分，风格资产可在设置页手工录入
-- 真机文件导出（@capacitor/filesystem）、Android 原生构建产物
+- 真机文件导出（@capacitor/filesystem）——当前导出走浏览器下载/剪贴板；debug APK 已可构建，正式签名包待配 keystore
 - LLM 用量统计、敏感标记的完整 UI（schema 字段已就位）
 
 ## 运行
@@ -31,6 +31,22 @@ npx cap add android
 npm run cap:sync   # 同步到 Android 工程
 npm run cap:open   # Android Studio 构建签名 APK
 ```
+
+### 命令行出 APK（Windows 实测可用）
+
+环境前置：JDK 17、Android SDK（platform-tools / platforms;android-34 / build-tools;34.0.0）。
+国内网络无法直连 `dl.google.com`，SDK 组件可用腾讯云镜像安装：
+`SDK_TEST_BASE_URL=https://mirrors.cloud.tencent.com/AndroidSDK/ sdkmanager --install platform-tools "platforms;android-34" "build-tools;34.0.0"`
+
+```bash
+cd app/android
+./gradlew assembleDebug -Dorg.gradle.java.home=/d/Java/jdk-17
+# 产物：app/build/outputs/apk/debug/app-debug.apk
+```
+
+两个必须显式指定的坑：
+1. `-Dorg.gradle.java.home=` 不能省 —— 本机全局 `~/.gradle/gradle.properties` 里 `org.gradle.java.home` 指向 JDK 8，AGP 8.2.1 会直接解析失败。
+2. `~/.gradle/init.gradle` 注入的阿里云仓库必须是 `https://`（Gradle 8 拒绝明文 http）。
 
 ## 发布链路（对接 wechat-article-writer）
 
