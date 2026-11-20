@@ -10,7 +10,8 @@
   - `prompt.ts` 六层提示词组装器（系统角色 → Persona 有界摘要 → 配方择优资产 → 个人元素 → 本次要求 → 阶段调整指令），来源强制隔离（self/benchmark/personal），两阶段择优的 v1 实现（标签相关性 + 质量分排序，每维度取 1 个主样本）
   - `machine.ts` 三阶段状态机（大纲 → 初稿 → 标题/口播），人工门禁（初稿必须先确认大纲），事件留痕
 - **模型配置**（`src/core/providers.ts` + `views/ModelConfigForm.vue`）：服务商下拉（9 家）→ 接口地址自动带出 → 填 Key → 一键拉取模型列表 → 下拉选模型。详见"模型配置与网络"。
-- **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（人工录入 + AI Rubric 打分）、设置（档案/模型/个人元素库）
+- **对标链接预填**（`src/core/benchmarkFetcher.ts`）：粘贴公众号链接 → 抓取标题/作者/日期/正文 → 预览 → 人工确认后填表。**只支持公众号**（知乎需登录态，实测 403）；抓到的全文只在内存，入库只有摘录；只在真机可用（浏览器受同源策略限制）。
+- **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（链接预填 + 人工录入 + AI Rubric 打分）、设置（档案/模型/个人元素库）
 - **交接包**（`src/core/export/handoff.ts`）：定稿导出 Markdown + YAML front matter（title/digest/author），对接 [wechat-article-writer](https://github.com/yuesf/wechat-article-writer) 的 build_article → preview → draft/add 流程
 
 ## 未实现（按 ADR 分期）
