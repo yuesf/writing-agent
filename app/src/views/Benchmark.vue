@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { addBenchmark, addRubric, getLlmConfig, listBenchmarks, removeRow } from '../core/db'
+import { addBenchmark, addRubric, getLlmConfig, listAssets, listBenchmarks, removeRow } from '../core/db'
 import { chatStream } from '../core/agent/llm'
+import { clusterBenchmarkStyles, detachBenchmarkStyles, styleNameOf } from '../core/agent/styleCluster'
 import { fetchWechatArticle, pickWechatUrl } from '../core/benchmarkFetcher'
-import type { Benchmark } from '../core/types'
+import type { Asset, Benchmark } from '../core/types'
 
 const items = ref<Benchmark[]>([])
 const err = ref('')
@@ -20,13 +21,37 @@ const ingesting = ref(false)
 const fetchErr = ref('')
 const lastIngested = ref<{ id: number; title: string; author: string; chars: number } | null>(null)
 
+// 风格自动划分（ADR-019）
+const styles = ref<Asset[]>([])
+const clustering = ref(false)
+const clusterMsg = ref('')
+const clusterErr = ref('')
+
 const RUBRIC_DIMS = ['信息密度', '结构清晰度', '开头钩子', '风格一致性', '观点锐度', '可读性']
 
 // 边输边判：粘错平台（知乎/小红书）当场提示，不必等点了抓取才发现
 const linkInvalid = computed(() => !!linkInput.value.trim() && pickWechatUrl(linkInput.value) === null)
 
+const pendingCount = computed(() => items.value.filter(b => !b.style_id && (b.excerpt ?? '').length >= 100).length)
+const unstyledCount = computed(() => items.value.filter(b => !b.style_id).length)
+
+// 风格 → 篇数/篇目由 benchmark.style_id 现算，不维护冗余计数（少一处会不一致的状态）
+const styleGroups = computed(() =>
+  styles.value
+    .map(st => ({
+      id: st.id,
+      name: styleNameOf(st),
+      summary: (st.content.split('\n').find(l => l.startsWith('一句话：')) ?? '').replace('一句话：', ''),
+      quality: st.quality ?? 0,
+      members: items.value.filter(b => b.style_id === st.id)
+    }))
+    .filter(g => g.members.length)
+    .sort((a, b) => b.members.length - a.members.length)
+)
+
 async function reload() {
   items.value = await listBenchmarks()
+  styles.value = await listAssets({ type: 'style', source: 'benchmark' })
 }
 onMounted(reload)
 
@@ -86,6 +111,45 @@ async function undoLast() {
   await removeRow('benchmark', last.id)
   lastIngested.value = null
   info.value = `已撤销：《${last.title}》`
+  await reload()
+}
+
+// 只划分还没归类的文章：增量跑，已归档的不动，风格 id 保持稳定
+async function runCluster() {
+  clusterErr.value = ''
+  clusterMsg.value = ''
+  if (!pendingCount.value) {
+    clusterMsg.value = unstyledCount.value
+      ? '未归类的文章摘录都太短（需要 ≥100 字），先在文章里补摘录'
+      : '没有待划分的文章'
+    return
+  }
+  const cfg = await getLlmConfig()
+  if (!cfg) {
+    clusterErr.value = '请先在设置里配置模型——划分风格要调用 LLM'
+    return
+  }
+  clustering.value = true
+  try {
+    const r = await clusterBenchmarkStyles(cfg, p => {
+      clusterMsg.value = `分析中 ${p.index}/${p.total}：《${p.title}》`
+    })
+    await reload()
+    clusterMsg.value =
+      `完成：新建 ${r.created} 个风格，归入已有风格 ${r.joined} 篇` +
+      (r.failed ? `，${r.failed} 篇失败（再点一次可重试）` : '') +
+      '。'
+  } catch (e: any) {
+    clusterErr.value = `划分失败：${String(e?.message ?? e)}`
+  } finally {
+    clustering.value = false
+  }
+}
+
+// 删风格档案要先把文章解绑，否则 benchmark 会指向不存在的 id
+async function delStyle(id: number) {
+  await detachBenchmarkStyles(id)
+  await removeRow('asset', id)
   await reload()
 }
 
@@ -154,7 +218,6 @@ async function del(id: number) {
     </div>
 
     <div class="card">
-      <h2>录入对标文章</h2>
       <h2>手动录入（公众号抓不到 / 其他平台）</h2>
       <label>平台</label>
       <select v-model="form.platform">
@@ -175,8 +238,37 @@ async function del(id: number) {
       <button class="primary" @click="save">手动入库</button>
     </div>
 
+    <div class="card">
+      <h2>写作风格（自动划分）</h2>
+      <p class="muted">
+        按文体、语气、结构骨架、开头方式、句式节奏，把库里文章归到同一类写法下。能归入已有风格就归入，
+        明显不同族才新建——所以库越大，风格分得越准。写初稿时只注入 1 个风格档案（质量分最高的那个）。
+      </p>
+      <button class="primary" :disabled="clustering || !pendingCount" @click="runCluster">
+        {{ clustering ? '划分中…' : `自动划分风格（待划分 ${pendingCount} 篇）` }}
+      </button>
+      <p v-if="clusterMsg" class="muted">{{ clusterMsg }}</p>
+      <p v-if="clusterErr" class="err">{{ clusterErr }}</p>
+
+      <div v-for="g in styleGroups" :key="g.id" class="card" style="background: var(--bg-soft)">
+        <h2>{{ g.name }} <span class="pill">{{ g.members.length }} 篇</span></h2>
+        <p v-if="g.summary" class="muted">{{ g.summary }}</p>
+        <p class="muted">
+          质量分 {{ g.quality ? g.quality.toFixed(1) : '—' }}（该风格下 Rubric 总分均值，写作时择优用）
+        </p>
+        <p class="muted">篇目：{{ g.members.map(m => `《${m.title}》`).join('、') }}</p>
+        <button style="color: var(--warn)" @click="delStyle(g.id)">删除这个风格（文章保留）</button>
+      </div>
+      <p v-if="!styleGroups.length && items.length" class="muted">还没有风格档案，点上面的按钮开始划分。</p>
+    </div>
+
     <div v-for="b in items" :key="b.id" class="card">
-      <h2>{{ b.title }} <span class="pill">{{ b.platform }}</span></h2>
+      <h2>
+        {{ b.title }}
+        <span class="pill">{{ b.platform }}</span>
+        <span v-if="b.style_name" class="pill">{{ b.style_name }}</span>
+        <span v-else class="pill">未归类</span>
+      </h2>
       <p class="muted">{{ b.author }} · {{ b.published_at }} · 标签 {{ b.tags || '无' }}</p>
       <p class="muted">{{ b.rubric ? 'Rubric：' + b.rubric : '未打分' }}</p>
       <button @click="score(b)">AI 打分</button>

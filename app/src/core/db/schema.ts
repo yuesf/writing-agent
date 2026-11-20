@@ -22,7 +22,8 @@ export const DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS benchmark (
     id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT, title TEXT, url TEXT,
     author TEXT, published_at TEXT, excerpt TEXT, tags TEXT,
-    metrics TEXT DEFAULT '', rubric TEXT DEFAULT '', created_at TEXT)`,
+    metrics TEXT DEFAULT '', rubric TEXT DEFAULT '',
+    style_id INTEGER DEFAULT 0, style_name TEXT DEFAULT '', created_at TEXT)`,
   `CREATE TABLE IF NOT EXISTS asset (
     id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, source TEXT, content TEXT,
     tags TEXT DEFAULT '', quality REAL DEFAULT 0, sensitive INTEGER DEFAULT 0,
@@ -44,5 +45,16 @@ export const COLUMN_MIGRATIONS: { table: string; column: string; ddl: string }[]
     table: 'llm_config',
     column: 'provider',
     ddl: `ALTER TABLE llm_config ADD COLUMN provider TEXT DEFAULT ''`
+  },
+  // ADR-019：对标文章归入风格档案
+  {
+    table: 'benchmark',
+    column: 'style_id',
+    ddl: `ALTER TABLE benchmark ADD COLUMN style_id INTEGER DEFAULT 0`
+  },
+  {
+    table: 'benchmark',
+    column: 'style_name',
+    ddl: `ALTER TABLE benchmark ADD COLUMN style_name TEXT DEFAULT ''`
   }
 ]

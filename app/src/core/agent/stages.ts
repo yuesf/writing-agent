@@ -4,8 +4,8 @@ import type { StageId } from '../types'
 export interface StageDef {
   id: StageId
   label: string
-  // 该阶段注入的资产类型（ADR-006 检索注入策略表）
-  assetTypes: Array<'structure' | 'phrase' | 'sample' | 'fact' | 'rule'>
+  // 该阶段注入的资产类型（ADR-006 检索注入策略表；风格档案见 ADR-019，排在首位=先定调）
+  assetTypes: Array<'structure' | 'phrase' | 'sample' | 'fact' | 'rule' | 'style'>
   // 生成要求提示
   requirement: string
 }
@@ -20,7 +20,8 @@ export const STAGES: StageDef[] = [
   {
     id: 'draft',
     label: '初稿',
-    assetTypes: ['sample', 'fact'],
+    // style 只注入 1 个（pickAssets 每维度取最优），即"多个候选里挑最贴合本次选题的那一个"
+    assetTypes: ['style', 'sample', 'fact'],
     requirement: '按确认过的大纲写全文初稿，Markdown 格式，小节用 ##/###（对接公众号排版交接格式）。'
   },
   {

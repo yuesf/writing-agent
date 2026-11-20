@@ -55,10 +55,13 @@ export interface Benchmark {
   tags: string // 逗号分隔：文体,主题,场景
   metrics: string // 人工录入的效果数据，可空
   rubric: string // LLM 打分 JSON，人可覆写
+  style_id: number // 归入的风格档案（asset.id，type='style'）；0 = 未划分
+  style_name: string // 冗余存名，列表直接展示，省一次 join
   created_at: string
 }
 
-export type AssetType = 'sample' | 'structure' | 'phrase' | 'fact' | 'rule' | 'personal'
+// 'style' = 从对标文章归纳出的风格档案（ADR-019），source='benchmark'
+export type AssetType = 'sample' | 'structure' | 'phrase' | 'fact' | 'rule' | 'personal' | 'style'
 export type AssetSource = 'self' | 'benchmark' | 'personal' // 来源强制隔离（ADR-009）
 
 export interface Asset {

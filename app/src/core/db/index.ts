@@ -105,19 +105,31 @@ export async function listEvents(projectId: number): Promise<StageEvent[]> {
   return rows.filter(r => r.project_id === projectId) as StageEvent[]
 }
 
-// ---------- 对标基准库（ADR-007：全人工录入） ----------
-export async function addBenchmark(b: Omit<Benchmark, 'id' | 'created_at' | 'rubric'>): Promise<number> {
-  return (await ensureDb()).insert('benchmark', { ...b, rubric: '', created_at: now() })
+// ---------- 对标基准库（ADR-007：全人工录入；ADR-019：风格自动归类） ----------
+export async function addBenchmark(
+  b: Omit<Benchmark, 'id' | 'created_at' | 'rubric' | 'style_id' | 'style_name'>
+): Promise<number> {
+  return (await ensureDb()).insert('benchmark', {
+    ...b, rubric: '', style_id: 0, style_name: '', created_at: now()
+  })
 }
 
 export async function listBenchmarks(): Promise<Benchmark[]> {
-  const rows = await (await ensureDb()).list('benchmark')
-  return rows.reverse() as Benchmark[]
+  const rows = (await (await ensureDb()).list('benchmark')) as Benchmark[]
+  // 老库刚迁移完这两列可能是 null，统一补成默认值，UI 不必到处判空
+  return rows
+    .map(r => ({ ...r, style_id: Number(r.style_id) || 0, style_name: r.style_name || '' }))
+    .reverse()
 }
 
 // Rubric 打分（LLM 自动打，人可覆写 —— ADR-007）
 export async function addRubric(id: number, rubric: string): Promise<void> {
   await (await ensureDb()).update('benchmark', id, { rubric })
+}
+
+// 归入某风格档案；styleId=0 表示解绑
+export async function setBenchmarkStyle(id: number, styleId: number, styleName: string): Promise<void> {
+  await (await ensureDb()).update('benchmark', id, { style_id: styleId, style_name: styleName })
 }
 
 // ---------- 资产库（ADR-006/009/013：六类资产，来源隔离） ----------
@@ -130,6 +142,10 @@ export async function listAssets(filter?: { type?: string; source?: string }): P
   if (filter?.type) rows = rows.filter(r => r.type === filter.type)
   if (filter?.source) rows = rows.filter(r => r.source === filter.source)
   return rows
+}
+
+export async function updateAsset(id: number, patch: Partial<Omit<Asset, 'id' | 'created_at'>>): Promise<void> {
+  await (await ensureDb()).update('asset', id, patch)
 }
 
 export async function removeRow(table: string, id: number): Promise<void> {

@@ -11,14 +11,15 @@
   - `machine.ts` 三阶段状态机（大纲 → 初稿 → 标题/口播），人工门禁（初稿必须先确认大纲），事件留痕
 - **模型配置**（`src/core/providers.ts` + `views/ModelConfigForm.vue`）：服务商下拉（9 家）→ 接口地址自动带出 → 填 Key → 一键拉取模型列表 → 下拉选模型。详见"模型配置与网络"。
 - **对标链接抓取**（`src/core/benchmarkFetcher.ts`）：粘贴公众号链接 → 抓取标题/作者/日期/正文 → **直接入库**（不二次确认，带撤销条与 URL 去重）。**只支持公众号**（知乎需登录态，实测 403）；抓到的全文只在内存，入库只有摘录；只在真机可用（浏览器受同源策略限制）。
-- **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（链接抓取即入库 + 手动录入 + AI Rubric 打分）、设置（档案/模型/个人元素库）
+- **风格自动划分**（`src/core/agent/styleCluster.ts` + `styleProfile.ts`，ADR-019）：对标库一键划分写作风格 → `asset(type='style')` 存风格档案（文体/语气/结构骨架/开头方式/人称/句式/术语密度/段落节奏）→ 初稿阶段只注入 1 个（质量分最高的那个）。增量归属而非一次性聚类，风格 id 稳定，可反复补跑。
+- **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（链接抓取即入库 + 手动录入 + AI Rubric 打分 + 风格自动划分）、设置（档案/模型/个人元素库）
 - **交接包**（`src/core/export/handoff.ts`）：定稿导出 Markdown + YAML front matter（title/digest/author），对接 [wechat-article-writer](https://github.com/yuesf/wechat-article-writer) 的 build_article → preview → draft/add 流程
 
 ## 未实现（按 ADR 分期）
 
-- embedding 检索（v2，`prompt.ts` 的 `pickAssets` 当前用标签相关性降级）
+- embedding 检索（v2，`prompt.ts` 的 `pickAssets` 当前用标签相关性降级；风格选择当前按 Rubric 质量分择优）
 - 回路 2/3 全流程（反馈蒸馏、Rubric 校准、复盘报告）——v1 已埋事件数据
-- 对标文章的风格资产化自动拆解（管线 B）——当前对标仅打分，风格资产可在设置页手工录入
+- 风格档案的人工精修 UI（当前档案由 LLM 生成、只读；要改得直接改 asset 行）
 - 真机文件导出（@capacitor/filesystem）——当前导出走浏览器下载/剪贴板；debug APK 已可构建，正式签名包待配 keystore
 - LLM 用量统计、敏感标记的完整 UI（schema 字段已就位）
 
