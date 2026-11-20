@@ -2,16 +2,30 @@
 import type { Row, StorageBackend } from './adapter'
 import { SqliteBackend, WebBackend } from './adapter'
 import { Capacitor } from '@capacitor/core'
-import type { Asset, Benchmark, LlmConfig, Project, StageEvent, StageId, StageState, UserProfile } from '../types'
+import type { Asset, Benchmark, LlmConfig, LlmDraft, ProfileHistory, ProfileProposal, Project, StageEvent, StageId, StageState, UserProfile } from '../types'
+import { providerByUrl } from '../providers'
 
 let backend: StorageBackend | null = null
+let initPromise: Promise<StorageBackend> | null = null
 
 export async function ensureDb(): Promise<StorageBackend> {
-  if (!backend) {
-    backend = Capacitor.isNativePlatform() ? new SqliteBackend() : new WebBackend()
-    await backend.init()
+  if (backend) return backend
+  // 并发调用只初始化一次；失败时不缓存半成品后端，让错误上抛并可重试
+  if (!initPromise) {
+    initPromise = (async () => {
+      const native = Capacitor.isNativePlatform()
+      console.log('[DBG] ensureDb backend=' + (native ? 'sqlite' : 'web'))
+      const b = native ? new SqliteBackend() : new WebBackend()
+      await b.init()
+      backend = b
+      return b
+    })().catch(e => {
+      console.log('[DBG] ensureDb failed: ' + String(e?.message ?? e))
+      initPromise = null
+      throw e
+    })
   }
-  return backend
+  return initPromise
 }
 
 function now(): string {
@@ -34,10 +48,14 @@ export async function saveProfile(p: Omit<UserProfile, 'id' | 'updated_at'>): Pr
 // ---------- LLM 配置 ----------
 export async function getLlmConfig(): Promise<LlmConfig | null> {
   const rows = await (await ensureDb()).list('llm_config')
-  return (rows[0] as LlmConfig) ?? null
+  const row = rows[0]
+  if (!row) return null
+  // 老配置没有 provider 字段：按接口地址反查，反查不到视为自定义，避免每次都要重选
+  const provider = row.provider || providerByUrl(row.base_url || '')?.id || 'custom'
+  return { ...(row as LlmConfig), provider }
 }
 
-export async function saveLlmConfig(c: Omit<LlmConfig, 'id' | 'updated_at'>): Promise<void> {
+export async function saveLlmConfig(c: LlmDraft): Promise<void> {
   const b = await ensureDb()
   const existing = await b.list('llm_config')
   if (existing.length) await b.update('llm_config', existing[0].id, { ...c, updated_at: now() })
@@ -119,6 +137,81 @@ export async function listAssets(filter?: { type?: string; source?: string }): P
 
 export async function removeRow(table: string, id: number): Promise<void> {
   await (await ensureDb()).remove(table, id)
+}
+
+// ---------- 档案演化（ADR-015）：候选事实 → 人工确认 → 合并 + 快照 ----------
+export async function addProposal(p: Omit<ProfileProposal, 'id' | 'created_at' | 'resolved_at' | 'status'>): Promise<number> {
+  return (await ensureDb()).insert('profile_proposal', { ...p, status: 'pending', created_at: now(), resolved_at: '' })
+}
+
+export async function listProposals(status?: 'pending' | 'accepted' | 'rejected'): Promise<ProfileProposal[]> {
+  let rows = (await (await ensureDb()).list('profile_proposal')) as ProfileProposal[]
+  if (status) rows = rows.filter(r => r.status === status)
+  return rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+}
+
+// 采纳：先存快照，再按字段策略合并（background 累积追加，其余覆盖）
+export async function resolveProposal(id: number, accept: boolean): Promise<void> {
+  const b = await ensureDb()
+  const rows = (await b.list('profile_proposal')) as ProfileProposal[]
+  const prop = rows.find(r => r.id === id)
+  if (!prop || prop.status !== 'pending') return
+
+  if (accept) {
+    const profile = await getProfile()
+    if (!profile) throw new Error('档案不存在')
+    await snapshotProfile(`采纳档案建议：${prop.field}`)
+
+    const value = prop.proposed_value.trim()
+    const next: any = {
+      name: profile.name,
+      profession: profile.profession,
+      background: profile.background,
+      platform: profile.platform,
+      audience: profile.audience
+    }
+    if (prop.field === 'background') {
+      // 背景类是经历累积：不覆盖，去重后追加
+      if (!next.background.includes(value)) next.background = next.background ? `${next.background}；${value}` : value
+    } else {
+      next[prop.field] = value
+    }
+    await saveProfile(next)
+  }
+
+  await b.update('profile_proposal', id, { status: accept ? 'accepted' : 'rejected', resolved_at: now() })
+}
+
+async function snapshotProfile(reason: string): Promise<void> {
+  const profile = await getProfile()
+  if (!profile) return
+  await (await ensureDb()).insert('profile_history', { snapshot: JSON.stringify(profile), reason, created_at: now() })
+}
+
+export async function listProfileHistory(): Promise<ProfileHistory[]> {
+  const rows = (await (await ensureDb()).list('profile_history')) as ProfileHistory[]
+  return rows.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+}
+
+// 回滚到上一次快照（只回滚一次，用完即弃，可连续回滚）
+export async function rollbackProfile(): Promise<boolean> {
+  const b = await ensureDb()
+  const history = await listProfileHistory()
+  const last = history[0]
+  if (!last) return false
+  const rows = await b.list('user_profile')
+  if (!rows.length) return false
+  const snap = JSON.parse(last.snapshot)
+  await b.update('user_profile', rows[0].id, {
+    name: snap.name ?? '',
+    profession: snap.profession ?? '',
+    background: snap.background ?? '',
+    platform: snap.platform ?? '',
+    audience: snap.audience ?? '',
+    updated_at: now()
+  })
+  await b.remove('profile_history', last.id)
+  return true
 }
 
 export type { Row }

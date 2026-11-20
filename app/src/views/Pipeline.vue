@@ -15,6 +15,7 @@ const streaming = ref<StageId | null>(null)
 const streamText = ref('')
 const directives = ref<Record<string, string>>({})
 const err = ref('')
+const info = ref('')
 const exported = ref(false)
 
 const confirmedCount = computed(() => stages.value.filter(s => s.status === 'confirmed').length)
@@ -69,8 +70,12 @@ async function revise(id: StageId) {
 
 async function confirm(id: StageId) {
   err.value = ''
+  info.value = ''
   try {
-    await confirmStage(props.projectId, id)
+    const created = await confirmStage(props.projectId, id)
+    info.value = created > 0
+      ? `已从本次交互提炼 ${created} 条档案建议，去「设置 → 档案演化」确认后生效`
+      : '已确认。本次没有发现新的档案信息。'
     await load()
   } catch (e: any) {
     err.value = String(e?.message ?? e)
@@ -130,6 +135,7 @@ async function download() {
       <button class="primary" :disabled="!allConfirmed" @click="download">导出交接包 (.md)</button>
       <p v-if="exported" class="muted">已导出。把它和图片素材放到电脑上，交给 wechat-article-writer 执行。</p>
     </div>
+    <p v-if="info" class="muted card">{{ info }}</p>
     <p class="err card">{{ err }}</p>
   </div>
 </template>

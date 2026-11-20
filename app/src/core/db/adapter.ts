@@ -17,12 +17,29 @@ export class SqliteBackend implements StorageBackend {
   private db: any = null
 
   async init() {
+    console.log('[DBG] sqlite.init start')
     const { CapacitorSQLite, SQLiteConnection } = await import('@capacitor-community/sqlite')
+    console.log('[DBG] sqlite module loaded')
     const conn = new SQLiteConnection(CapacitorSQLite)
     this.db = await conn.createConnection('writing_agent', false, 'no-encryption', 1, false)
+    console.log('[DBG] sqlite connection created')
     await this.db.open()
-    const { DDL } = await import('./schema')
+    console.log('[DBG] sqlite opened')
+    const { COLUMN_MIGRATIONS, DDL } = await import('./schema')
     for (const sql of DDL) await this.db.execute(sql)
+    for (const m of COLUMN_MIGRATIONS) {
+      if (await this.hasColumn(m.table, m.column)) continue
+      await this.db.execute(m.ddl)
+      console.log(`[DBG] migrated ${m.table}.${m.column}`)
+    }
+    console.log('[DBG] sqlite ddl done, tables=' + DDL.length)
+    const chk = await this.db.query("SELECT count(*) AS c FROM sqlite_master WHERE type='table'")
+    console.log('[DBG] sqlite table count=' + JSON.stringify(chk.values))
+  }
+
+  private async hasColumn(table: string, column: string): Promise<boolean> {
+    const res = await this.db.query(`PRAGMA table_info(${table})`)
+    return (res.values ?? []).some((r: any) => r.name === column)
   }
 
   async list(table: string): Promise<Row[]> {
@@ -61,8 +78,13 @@ export class WebBackend implements StorageBackend {
 
   async init() {
     const raw = localStorage.getItem(LS_KEY)
-    if (raw) this.store = JSON.parse(raw)
-    else {
+    if (raw) {
+      this.store = JSON.parse(raw)
+      // seq 不落盘：重启后必须按各表现有最大 id 恢复，否则新插入的 id 会与旧行冲突并覆盖数据
+      for (const [table, rows] of Object.entries(this.store)) {
+        this.seq[table] = (rows as Row[]).reduce((max, r) => Math.max(max, Number(r.id) || 0), 0)
+      }
+    } else {
       this.store = {}
       await this.persist()
     }

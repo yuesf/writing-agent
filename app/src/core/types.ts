@@ -11,11 +11,15 @@ export interface UserProfile {
 
 export interface LlmConfig {
   id: number
-  base_url: string // OpenAI 兼容端点，如 https://api.deepseek.com/v1
+  provider: string // 服务商 ID（ADR-016），'' = 未识别，按自定义处理
+  base_url: string // OpenAI 兼容端点，由服务商预设自动带出
   model: string
   api_key: string
   updated_at: string
 }
+
+// 表单层的模型配置（写库前的草稿，无 id/时间戳）
+export type LlmDraft = Pick<LlmConfig, 'provider' | 'base_url' | 'model' | 'api_key'>
 
 export type StageId = 'outline' | 'draft' | 'title' // v1 三阶段（ADR-008）
 export type StageStatus = 'pending' | 'generating' | 'draft' | 'confirmed'
@@ -77,3 +81,38 @@ export interface StageEvent {
   payload: string
   created_at: string
 }
+
+// ---------- 档案演化（ADR-015）：从交互中提取候选事实，人工确认后合并 ----------
+export type ProfileField = 'name' | 'profession' | 'background' | 'platform' | 'audience'
+
+export const PROFILE_FIELDS: ProfileField[] = ['name', 'profession', 'background', 'platform', 'audience']
+
+export const PROFILE_FIELD_LABEL: Record<ProfileField, string> = {
+  name: '称呼',
+  profession: '职业 / 领域',
+  background: '背景与经历',
+  platform: '平台与账号定位',
+  audience: '目标读者'
+}
+
+export interface ProfileProposal {
+  id: number
+  field: ProfileField
+  current_value: string // 提炼时的档案原值，用于展示"旧 → 新"
+  proposed_value: string
+  reason: string // 依据（哪句话/哪次指令得出的）
+  confidence: number // 0~1，LLM 自评，仅作排序参考
+  source: string // 信号来源：stage:outline / directive / manual
+  project_id: number
+  status: 'pending' | 'accepted' | 'rejected'
+  created_at: string
+  resolved_at: string
+}
+
+export interface ProfileHistory {
+  id: number
+  snapshot: string // 变更前的完整档案 JSON
+  reason: string
+  created_at: string
+}
+

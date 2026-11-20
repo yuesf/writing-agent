@@ -53,3 +53,12 @@ label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px
   white-space: pre-wrap; background: var(--accent-soft); border-radius: 8px;
   padding: 10px; font-size: 14px; max-height: 340px; overflow: auto;
 }
+/* 模型配置：一行放标签与操作按钮 */
+.row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin: 4px 0 6px;
+}
+.row .row-label { margin-bottom: 0; }
+button.mini { padding: 4px 10px; font-size: 12px; }
+button.link { border: none; background: none; color: var(--accent); padding: 0; font-size: 13px; }
+.addr { font-size: 12px; word-break: break-all; margin-bottom: 8px; }

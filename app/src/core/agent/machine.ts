@@ -4,6 +4,7 @@ import type { StageId } from '../types'
 import { appendEvent, getLlmConfig, getProfile, getProject, getStages, listAssets, setStage, updateProject } from '../db'
 import { chatStream } from './llm'
 import { buildPrompt } from './prompt'
+import { extractProfile } from './profileLearn'
 import { stageDef } from './stages'
 
 // 生成某阶段草案（流式，onDelta 供 UI 实时渲染）
@@ -50,13 +51,21 @@ export async function generateStage(
 }
 
 // 人工门禁确认（采纳率指标的数据源，ADR-011 E）
-export async function confirmStage(projectId: number, stage: StageId): Promise<void> {
+// 确认即触发一次档案提炼（ADR-015）：派生动作，失败不影响确认本身
+export async function confirmStage(projectId: number, stage: StageId): Promise<number> {
   const stages = await getStages(projectId)
   const cur = stages.find(s => s.stage === stage)
   if (!cur || cur.status !== 'draft') throw new Error('当前没有可确认的草案')
   await setStage(cur.id, { status: 'confirmed', directive: '' })
   await appendEvent(projectId, stage, 'confirmed', {})
   await touchProject(projectId)
+
+  try {
+    const r = await extractProfile(projectId, `stage:${stage}`)
+    return r.created
+  } catch {
+    return 0 // 提炼失败不阻塞写作主流程
+  }
 }
 
 // 阶段调整指令（ADR-013 Stage 级）：留痕后重新生成

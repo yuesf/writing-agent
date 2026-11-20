@@ -6,9 +6,10 @@
 
 - **数据层**（`src/core/db/`）：7 张表的 SQLite schema（真机）+ Web localStorage 降级适配器（浏览器 `npm run dev` 即可全流程调试）；事件溯源（`stage_event` 只追加）
 - **Agent 核心**（`src/core/agent/`）：
-  - `llm.ts` OpenAI 兼容流式客户端（用户自配 base_url/model/api_key，只存本地）
+  - `llm.ts` OpenAI 兼容客户端，走 `core/http.ts` 统一层（详见下方"模型配置与网络"）
   - `prompt.ts` 六层提示词组装器（系统角色 → Persona 有界摘要 → 配方择优资产 → 个人元素 → 本次要求 → 阶段调整指令），来源强制隔离（self/benchmark/personal），两阶段择优的 v1 实现（标签相关性 + 质量分排序，每维度取 1 个主样本）
   - `machine.ts` 三阶段状态机（大纲 → 初稿 → 标题/口播），人工门禁（初稿必须先确认大纲），事件留痕
+- **模型配置**（`src/core/providers.ts` + `views/ModelConfigForm.vue`）：服务商下拉（9 家）→ 接口地址自动带出 → 填 Key → 一键拉取模型列表 → 下拉选模型。详见"模型配置与网络"。
 - **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（人工录入 + AI Rubric 打分）、设置（档案/模型/个人元素库）
 - **交接包**（`src/core/export/handoff.ts`）：定稿导出 Markdown + YAML front matter（title/digest/author），对接 [wechat-article-writer](https://github.com/yuesf/wechat-article-writer) 的 build_article → preview → draft/add 流程
 
@@ -20,7 +21,20 @@
 - 真机文件导出（@capacitor/filesystem）——当前导出走浏览器下载/剪贴板；debug APK 已可构建，正式签名包待配 keystore
 - LLM 用量统计、敏感标记的完整 UI（schema 字段已就位）
 
-## 运行
+## 模型配置与网络
+
+**配置流程**：选服务商 → 接口地址自动带出（不可手改）→ 填 API Key → 点「获取模型列表」→ 下拉选模型。
+内置 DeepSeek / MiniMax / Kimi / 智谱 GLM / 通义千问 / 火山方舟 / 硅基流动 / OpenAI / 自定义。
+
+- 各家的 OpenAI 兼容端点写在 `src/core/providers.ts`，改地址只改这一个文件。
+- 模型列表来自 `GET {base_url}/models`，自动过滤 embedding / rerank / tts / whisper / image 等非对话模型。
+- 拉不到时的兜底：厂商不提供该端点（404/405）、返回空、或还没填 Key 时，用预设静态列表，仍可保存配置。
+- 需要手填模型名的场景：火山方舟的推理接入点 ID（`ep-` 开头）、中转站的私有模型名 —— 下拉旁边有「手动填写模型名」。
+
+**为什么有一个 `core/http.ts`**：真机 WebView 的 origin 是 `https://localhost`，直连第三方 API 会被同源策略拦截（服务商不会为客户端开 CORS 头）。所以真机走 `CapacitorHttp` 原生栈（Bridge 自动注册，无需配置），浏览器开发态走 `fetch`。
+
+**已知代价**：原生栈拿不到 SSE 流，真机上 `chatStream` 是一次性返回后整体渲染；流式打字机效果只在浏览器生效。
+
 
 ```bash
 cd app
@@ -47,6 +61,19 @@ cd app/android
 两个必须显式指定的坑：
 1. `-Dorg.gradle.java.home=` 不能省 —— 本机全局 `~/.gradle/gradle.properties` 里 `org.gradle.java.home` 指向 JDK 8，AGP 8.2.1 会直接解析失败。
 2. `~/.gradle/init.gradle` 注入的阿里云仓库必须是 `https://`（Gradle 8 拒绝明文 http）。
+
+### 装到真机
+
+部分国产 ROM（如 StepX / Flyme 系）会拦 `adb install`，报 `INSTALL_FAILED_USER_RESTRICTED`。
+绕过办法是走安装器直装：
+
+```bash
+adb push app-debug.apk /data/local/tmp/wa.apk
+adb shell pm install -r -d /data/local/tmp/wa.apk    # 输出 Success 即成功
+adb shell am start -n com.yuesf.writingagent/.MainActivity
+```
+
+> Git Bash 下 `adb push` 的 `/data/...` 会被转成 Windows 路径，前面加 `MSYS_NO_PATHCONV=1`。
 
 ## 发布链路（对接 wechat-article-writer）
 
