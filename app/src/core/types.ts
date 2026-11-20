@@ -46,14 +46,14 @@ export interface Project {
 
 export interface Benchmark {
   id: number
-  platform: string // 公众号 / 知乎
+  platform: string // 固定 '公众号'（只接公众号链接抓取，ADR-020）
   title: string
   url: string
   author: string
   published_at: string
-  excerpt: string // 只存特征与摘录（ADR-007 禁抓取）
-  tags: string // 逗号分隔：文体,主题,场景
-  metrics: string // 人工录入的效果数据，可空
+  excerpt: string // 只存抓取时自动抽取的摘录，全文不落库（ADR-007）
+  tags: string // 逗号分隔：文体,主题,场景（风格划分时自动合并）
+  metrics: string // 效果数据，抓取拿不到，暂留空
   rubric: string // LLM 打分 JSON，人可覆写
   style_id: number // 归入的风格档案（asset.id，type='style'）；0 = 未划分
   style_name: string // 冗余存名，列表直接展示，省一次 join

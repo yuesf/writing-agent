@@ -1,18 +1,18 @@
 # 写作智能体 App（工程骨架）
 
-按 `../DECISIONS.md`（ADR-001~014）实现的 v1 工程骨架：Vue3 + Capacitor + 端侧 SQLite + 自研轻量 Agent Loop。
+按 `../DECISIONS.md`（ADR-001~020）实现的 v1 工程骨架：Vue3 + Capacitor + 端侧 SQLite + 自研轻量 Agent Loop。
 
 ## 已实现
 
-- **数据层**（`src/core/db/`）：7 张表的 SQLite schema（真机）+ Web localStorage 降级适配器（浏览器 `npm run dev` 即可全流程调试）；事件溯源（`stage_event` 只追加）
+- **数据层**（`src/core/db/`）：9 张表的 SQLite schema（真机）+ Web localStorage 降级适配器（浏览器 `npm run dev` 即可全流程调试）；事件溯源（`stage_event` 只追加）
 - **Agent 核心**（`src/core/agent/`）：
   - `llm.ts` OpenAI 兼容客户端，走 `core/http.ts` 统一层（详见下方"模型配置与网络"）
   - `prompt.ts` 六层提示词组装器（系统角色 → Persona 有界摘要 → 配方择优资产 → 个人元素 → 本次要求 → 阶段调整指令），来源强制隔离（self/benchmark/personal），两阶段择优的 v1 实现（标签相关性 + 质量分排序，每维度取 1 个主样本）
   - `machine.ts` 三阶段状态机（大纲 → 初稿 → 标题/口播），人工门禁（初稿必须先确认大纲），事件留痕
-- **模型配置**（`src/core/providers.ts` + `views/ModelConfigForm.vue`）：服务商下拉（9 家）→ 接口地址自动带出 → 填 Key → 一键拉取模型列表 → 下拉选模型。详见"模型配置与网络"。
-- **对标链接抓取**（`src/core/benchmarkFetcher.ts`）：粘贴公众号链接 → 抓取标题/作者/日期/正文 → **直接入库**（不二次确认，带撤销条与 URL 去重）。**只支持公众号**（知乎需登录态，实测 403）；抓到的全文只在内存，入库只有摘录；只在真机可用（浏览器受同源策略限制）。
+- **模型配置**（`src/core/providers.ts` + `views/ModelConfigForm.vue`）：服务商下拉（DeepSeek / MiniMax）→ 接口地址自动带出 → 填 Key → 一键拉取模型列表 → 下拉选模型。详见"模型配置与网络"。
+- **对标链接抓取**（`src/core/benchmarkFetcher.ts`）：粘贴公众号链接 → 抓取标题/作者/日期/正文 → **直接入库**（不二次确认，带撤销条与 URL 去重）。**只支持公众号**（知乎需登录态，实测 403）；**这是对标库的唯一入口**，没有手动录入表单（ADR-020）；抓到的全文只在内存，入库只有摘录；只在真机可用（浏览器受同源策略限制）。
 - **风格自动划分**（`src/core/agent/styleCluster.ts` + `styleProfile.ts`，ADR-019）：对标库一键划分写作风格 → `asset(type='style')` 存风格档案（文体/语气/结构骨架/开头方式/人称/句式/术语密度/段落节奏）→ 初稿阶段只注入 1 个（质量分最高的那个）。增量归属而非一次性聚类，风格 id 稳定，可反复补跑。
-- **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（链接抓取即入库 + 手动录入 + AI Rubric 打分 + 风格自动划分）、设置（档案/模型/个人元素库）
+- **UI**（`src/views/`）：Onboarding（身份档案 + 模型配置）、项目列表、流水线（生成/草案/确认/调整指令）、对标录入（链接抓取即入库 + AI Rubric 打分 + 风格自动划分）、设置（档案/模型/个人元素库）
 - **交接包**（`src/core/export/handoff.ts`）：定稿导出 Markdown + YAML front matter（title/digest/author），对接 [wechat-article-writer](https://github.com/yuesf/wechat-article-writer) 的 build_article → preview → draft/add 流程
 
 ## 未实现（按 ADR 分期）

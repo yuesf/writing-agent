@@ -9,10 +9,6 @@ import type { Asset, Benchmark } from '../core/types'
 const items = ref<Benchmark[]>([])
 const err = ref('')
 const info = ref('')
-const form = ref({
-  platform: '公众号', title: '', url: '', author: '',
-  published_at: '', excerpt: '', tags: '', metrics: ''
-})
 
 // 抓取即入库（ADR-018）：抓取成功当场写库，不再二次确认；
 // 失败一律不入库，成功后提供一次性「撤销」，比多点一次确认更省事。
@@ -69,7 +65,7 @@ async function doIngest() {
   }
   const url = pickWechatUrl(linkInput.value)
   if (!url) {
-    fetchErr.value = '只识别公众号文章链接（https://mp.weixin.qq.com/s/...）。其他平台请用手动录入。'
+    fetchErr.value = '只识别公众号文章链接（https://mp.weixin.qq.com/s/...），其他链接抓不到正文。'
     return
   }
   // 去重：同一条链接重复入库会让风格样本和 Rubric 重复计权，先挡掉
@@ -153,18 +149,6 @@ async function delStyle(id: number) {
   await reload()
 }
 
-async function save() {
-  err.value = ''
-  const f = form.value
-  if (!f.title || !f.excerpt) { err.value = '标题与摘录必填（摘录=特征段落，只存摘录不存全文）'; return }
-  await addBenchmark({ ...f })
-  const keepTags = f.tags
-  form.value = { platform: f.platform, title: '', url: '', author: '', published_at: '', excerpt: '', tags: keepTags, metrics: '' }
-  linkInput.value = ''
-  await reload()
-  info.value = '已入库。建议录入 3~5 篇，覆盖不同作者与文体。'
-}
-
 // Rubric 六维 LLM 自动打分（ADR-007：人可覆写；失败不阻塞录入）
 async function score(b: Benchmark) {
   err.value = ''
@@ -196,7 +180,8 @@ async function del(id: number) {
       <h1>对标基准库</h1>
       <p class="muted">
         公众号文章粘贴链接即抓取入库（单篇、你主动触发），抓取失败不入库，入库后可点「撤销」删掉刚写的那篇。
-        知乎等其他平台请手动录入。录入后 AI 跑两条管线：打 Rubric 分（质量门判别用）+ 风格分析入资产库（写作用）。
+        目前只接公众号——知乎等平台需登录态，拿不到正文。
+        录入后 AI 跑两条管线：打 Rubric 分（质量门判别用）+ 风格分析入资产库（写作用）。
         建议覆盖不同作者、文体、热度层级。
       </p>
     </div>
@@ -205,9 +190,10 @@ async function del(id: number) {
       <h2>从公众号链接抓取</h2>
       <label>文章链接</label>
       <input v-model="linkInput" placeholder="https://mp.weixin.qq.com/s/..." />
-      <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章，其他平台请手动录入。</p>
+      <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章。</p>
       <button class="primary" :disabled="ingesting" @click="doIngest">{{ ingesting ? '抓取中…' : '抓取并入库' }}</button>
       <p v-if="fetchErr" class="err">{{ fetchErr }}</p>
+      <p v-if="info" class="muted">{{ info }}</p>
       <p class="muted">抓到后自动写入基准库：标题、公众号名、发布日期、摘录。全文只在内存里用于打分，不落库。</p>
 
       <div v-if="lastIngested" class="card" style="background: var(--bg-soft)">
@@ -215,27 +201,6 @@ async function del(id: number) {
         <p class="muted">{{ lastIngested.author || '作者未知' }} · 正文 {{ lastIngested.chars }} 字</p>
         <button @click="undoLast">撤销这次入库</button>
       </div>
-    </div>
-
-    <div class="card">
-      <h2>手动录入（公众号抓不到 / 其他平台）</h2>
-      <label>平台</label>
-      <select v-model="form.platform">
-        <option>公众号</option>
-        <option>知乎</option>
-      </select>
-      <p v-if="form.platform !== '公众号'" class="muted">该平台不支持链接抓取，请手动粘贴摘录。</p>
-      <label>标题 *</label><input v-model="form.title" />
-      <label>作者</label><input v-model="form.author" />
-      <label>链接（仅溯源用）</label><input v-model="form.url" />
-      <label>发布时间</label><input v-model="form.published_at" type="date" />
-      <label>特征摘录 *（开头/金句/代表段落，别贴全文）</label>
-      <textarea v-model="form.excerpt"></textarea>
-      <label>标签（文体,主题,场景；如：观点文,AI,技术科普）</label><input v-model="form.tags" />
-      <label>效果数据（能看到才填，如 阅读2万 在看300）</label><input v-model="form.metrics" />
-      <p class="err">{{ err }}</p>
-      <p class="muted">{{ info }}</p>
-      <button class="primary" @click="save">手动入库</button>
     </div>
 
     <div class="card">
@@ -261,6 +226,9 @@ async function del(id: number) {
       </div>
       <p v-if="!styleGroups.length && items.length" class="muted">还没有风格档案，点上面的按钮开始划分。</p>
     </div>
+
+    <p v-if="err" class="err">{{ err }}</p>
+    <p v-if="!items.length" class="muted">基准库还是空的：先粘一篇公众号文章链接抓进来，攒够几篇再划分风格。</p>
 
     <div v-for="b in items" :key="b.id" class="card">
       <h2>

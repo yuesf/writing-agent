@@ -25,9 +25,9 @@ const MOBILE_UA =
 
 // 公众号风控/失效页面的特征串。命中即明确报错，绝不静默入一个空壳。
 const BLOCKERS: Array<[string, string]> = [
-  ['环境异常', '公众号风控拦截了这次访问（页面提示"环境异常"）。等几分钟再试，或在微信里打开后复制正文粘贴。'],
-  ['完成验证后即可继续访问', '公众号要求完成人机验证，本次抓取被拦。请在微信里打开文章，复制正文粘贴。'],
-  ['请在微信客户端打开链接', '这个链接被限制为仅微信内打开。请在微信里复制正文后粘贴。'],
+  ['环境异常', '公众号风控拦截了这次访问（页面提示"环境异常"）。等几分钟再试。'],
+  ['完成验证后即可继续访问', '公众号要求完成人机验证，本次抓取被拦。过一会儿再试，或换一篇。'],
+  ['请在微信客户端打开链接', '这个链接被限制为仅微信内打开，App 里抓不到正文。'],
   ['该内容已被发布者删除', '这篇文章已被作者删除，做不了对标样本。'],
   ['此内容因违规无法查看', '这篇文章已被平台下架，做不了对标样本。']
 ]
@@ -191,7 +191,7 @@ function buildExcerpt(body: string): string {
 
 export function parseWechatHtml(html: string, url: string): FetchedArticle {
   if (!html || html.length < 500) {
-    throw new Error('页面返回内容异常（内容过短），可能是链接失效。请稍后重试或手动粘贴正文。')
+    throw new Error('页面返回内容异常（内容过短），可能是链接失效。请稍后重试或换一篇。')
   }
 
   for (const [marker, reason] of BLOCKERS) {
@@ -201,7 +201,7 @@ export function parseWechatHtml(html: string, url: string): FetchedArticle {
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const contentEl = doc.querySelector('#js_content')
   if (!contentEl) {
-    throw new Error('没找到正文容器（公众号可能改版，或这不是一篇图文文章）。请手动粘贴正文。')
+    throw new Error('没找到正文容器（公众号可能改版，或这不是一篇图文文章）。这篇抓不到，换一篇试试。')
   }
 
   const body = stripFooter(blockText(contentEl))
@@ -223,10 +223,10 @@ export function parseWechatHtml(html: string, url: string): FetchedArticle {
 export async function fetchWechatArticle(link: string): Promise<FetchedArticle> {
   const url = pickWechatUrl(link)
   if (!url) {
-    throw new Error('只识别公众号文章链接（https://mp.weixin.qq.com/s/...）。其他平台请手动粘贴正文。')
+    throw new Error('只识别公众号文章链接（https://mp.weixin.qq.com/s/...），其他链接抓不到正文。')
   }
   if (!isNative()) {
-    throw new Error('链接抓取只在手机 App 内可用：浏览器调试受同源策略限制。调试时请直接粘贴正文。')
+    throw new Error('链接抓取只在手机 App 内可用：浏览器调试受同源策略限制。请用手机 App 打开。')
   }
 
   const res = await requestJson({
@@ -242,7 +242,7 @@ export async function fetchWechatArticle(link: string): Promise<FetchedArticle> 
 
   if (!res.ok) {
     throw new Error(
-      `打开链接失败（HTTP ${res.status}）${res.status === 404 ? '：文章可能已被删除' : res.status === 403 ? '：访问被拒绝，可能需要在微信内打开' : ''}。请手动粘贴正文。`
+      `打开链接失败（HTTP ${res.status}）${res.status === 404 ? '：文章可能已被删除' : res.status === 403 ? '：访问被拒绝，可能需要在微信内打开' : ''}。这次没入库，稍后重试或换一篇。`
     )
   }
 
