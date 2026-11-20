@@ -13,14 +13,11 @@ export async function ensureDb(): Promise<StorageBackend> {
   // 并发调用只初始化一次；失败时不缓存半成品后端，让错误上抛并可重试
   if (!initPromise) {
     initPromise = (async () => {
-      const native = Capacitor.isNativePlatform()
-      console.log('[DBG] ensureDb backend=' + (native ? 'sqlite' : 'web'))
-      const b = native ? new SqliteBackend() : new WebBackend()
+      const b = Capacitor.isNativePlatform() ? new SqliteBackend() : new WebBackend()
       await b.init()
       backend = b
       return b
     })().catch(e => {
-      console.log('[DBG] ensureDb failed: ' + String(e?.message ?? e))
       initPromise = null
       throw e
     })

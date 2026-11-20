@@ -17,24 +17,16 @@ export class SqliteBackend implements StorageBackend {
   private db: any = null
 
   async init() {
-    console.log('[DBG] sqlite.init start')
     const { CapacitorSQLite, SQLiteConnection } = await import('@capacitor-community/sqlite')
-    console.log('[DBG] sqlite module loaded')
     const conn = new SQLiteConnection(CapacitorSQLite)
     this.db = await conn.createConnection('writing_agent', false, 'no-encryption', 1, false)
-    console.log('[DBG] sqlite connection created')
     await this.db.open()
-    console.log('[DBG] sqlite opened')
     const { COLUMN_MIGRATIONS, DDL } = await import('./schema')
     for (const sql of DDL) await this.db.execute(sql)
     for (const m of COLUMN_MIGRATIONS) {
       if (await this.hasColumn(m.table, m.column)) continue
       await this.db.execute(m.ddl)
-      console.log(`[DBG] migrated ${m.table}.${m.column}`)
     }
-    console.log('[DBG] sqlite ddl done, tables=' + DDL.length)
-    const chk = await this.db.query("SELECT count(*) AS c FROM sqlite_master WHERE type='table'")
-    console.log('[DBG] sqlite table count=' + JSON.stringify(chk.values))
   }
 
   private async hasColumn(table: string, column: string): Promise<boolean> {

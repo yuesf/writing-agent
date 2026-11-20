@@ -18,22 +18,9 @@ onMounted(async () => {
     bootErr.value = String(e?.reason?.message ?? e?.reason ?? '')
   })
   try {
-    const cap = (await import('@capacitor/core')).Capacitor
-    console.log(`[DBG] platform=${cap.getPlatform()} native=${cap.isNativePlatform()}`)
-    const t0 = Date.now()
     const p = await getProfile()
-    console.log(`[DBG] profile=${p ? 'found' : 'null'} cost=${Date.now() - t0}ms`)
-
-    // 临时持久化探针：写入一条事件再统计，重启后 before 应递增
-    const db = await import('./core/db')
-    const before = (await db.listEvents(0)).length
-    await db.appendEvent(0, 'outline', 'probe', { t: new Date().toISOString() })
-    const after = (await db.listEvents(0)).length
-    console.log(`[DBG] probe rows ${before} -> ${after}`)
-
     needOnboarding.value = !p
   } catch (e: any) {
-    console.log('[DBG] init failed: ' + String(e?.message ?? e))
     bootErr.value = `本地存储初始化失败：${String(e?.message ?? e)}`
   }
 })
