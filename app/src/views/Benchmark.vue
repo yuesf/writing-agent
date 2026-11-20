@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { addBenchmark, addRubric, getLlmConfig, listBenchmarks, removeRow } from '../core/db'
 import { chatStream } from '../core/agent/llm'
 import { fetchWechatArticle, pickWechatUrl } from '../core/benchmarkFetcher'
-import type { FetchedArticle } from '../core/benchmarkFetcher'
 import type { Benchmark } from '../core/types'
 
 const items = ref<Benchmark[]>([])
@@ -14,13 +13,12 @@ const form = ref({
   published_at: '', excerpt: '', tags: '', metrics: ''
 })
 
-// 抓取状态（ADR-017：抓到的全文只在内存，入库的只有摘录）
+// 抓取即入库（ADR-018）：抓取成功当场写库，不再二次确认；
+// 失败一律不入库，成功后提供一次性「撤销」，比多点一次确认更省事。
 const linkInput = ref('')
-const fetching = ref(false)
-const fetched = ref<FetchedArticle | null>(null)
+const ingesting = ref(false)
 const fetchErr = ref('')
-const fetchHint = ref('')
-const confirmedUse = ref(false)
+const lastIngested = ref<{ id: number; title: string; author: string; chars: number } | null>(null)
 
 const RUBRIC_DIMS = ['信息密度', '结构清晰度', '开头钩子', '风格一致性', '观点锐度', '可读性']
 
@@ -32,37 +30,63 @@ async function reload() {
 }
 onMounted(reload)
 
-async function doFetch() {
+function sameUrl(a: string, b: string): boolean {
+  return (a ?? '').trim() === (b ?? '').trim() && !!a
+}
+
+async function doIngest() {
   fetchErr.value = ''
-  fetchHint.value = ''
-  fetched.value = null
-  confirmedUse.value = false
+  info.value = ''
+  lastIngested.value = null
   if (!linkInput.value.trim()) {
     fetchErr.value = '先粘贴公众号文章链接（https://mp.weixin.qq.com/s/...）'
     return
   }
-  fetching.value = true
+  const url = pickWechatUrl(linkInput.value)
+  if (!url) {
+    fetchErr.value = '只识别公众号文章链接（https://mp.weixin.qq.com/s/...）。其他平台请用手动录入。'
+    return
+  }
+  // 去重：同一条链接重复入库会让风格样本和 Rubric 重复计权，先挡掉
+  const dup = items.value.find(b => sameUrl(b.url, url))
+  if (dup) {
+    fetchErr.value = `这篇已经在库里了：《${dup.title}》，没有重复入库。`
+    return
+  }
+
+  ingesting.value = true
   try {
-    fetched.value = await fetchWechatArticle(linkInput.value)
+    const a = await fetchWechatArticle(url)
+    const title = a.title || '未取到标题的公众号文章'
+    const id = await addBenchmark({
+      platform: '公众号',
+      title,
+      url: a.url,
+      author: a.author,
+      published_at: a.publishedAt,
+      excerpt: a.excerpt,
+      tags: '',
+      metrics: ''
+    })
+    await reload()
+    lastIngested.value = { id, title, author: a.author, chars: a.chars }
+    info.value = `已入库：《${title}》· 正文 ${a.chars} 字，库里只存摘录 ${a.excerpt.length} 字。`
+    linkInput.value = ''
   } catch (e: any) {
     fetchErr.value = String(e?.message ?? e)
   } finally {
-    fetching.value = false
+    ingesting.value = false
   }
 }
 
-// 必须人工点一次才填表——抓错一篇不该静默进基准库
-function applyFetched() {
-  const a = fetched.value
-  if (!a) return
-  form.value.title = a.title
-  form.value.author = a.author
-  form.value.url = a.url
-  form.value.published_at = a.publishedAt
-  form.value.excerpt = a.excerpt
-  form.value.platform = '公众号'
-  confirmedUse.value = true
-  fetchHint.value = `已填表（正文 ${a.chars} 字）。核对标题与摘录后再入库。`
+// 抓错了不用去列表里找，直接撤掉刚写的那条
+async function undoLast() {
+  const last = lastIngested.value
+  if (!last) return
+  await removeRow('benchmark', last.id)
+  lastIngested.value = null
+  info.value = `已撤销：《${last.title}》`
+  await reload()
 }
 
 async function save() {
@@ -73,8 +97,6 @@ async function save() {
   const keepTags = f.tags
   form.value = { platform: f.platform, title: '', url: '', author: '', published_at: '', excerpt: '', tags: keepTags, metrics: '' }
   linkInput.value = ''
-  fetched.value = null
-  confirmedUse.value = false
   await reload()
   info.value = '已入库。建议录入 3~5 篇，覆盖不同作者与文体。'
 }
@@ -109,8 +131,8 @@ async function del(id: number) {
     <div class="card">
       <h1>对标基准库</h1>
       <p class="muted">
-        支持公众号文章粘贴链接自动预填（单篇、你主动触发、抓取结果需你确认后才入库）。
-        知乎等其他平台请手动粘贴正文。录入后 AI 跑两条管线：打 Rubric 分（质量门判别用）+ 风格分析入资产库（写作用）。
+        公众号文章粘贴链接即抓取入库（单篇、你主动触发），抓取失败不入库，入库后可点「撤销」删掉刚写的那篇。
+        知乎等其他平台请手动录入。录入后 AI 跑两条管线：打 Rubric 分（质量门判别用）+ 风格分析入资产库（写作用）。
         建议覆盖不同作者、文体、热度层级。
       </p>
     </div>
@@ -119,25 +141,21 @@ async function del(id: number) {
       <h2>从公众号链接抓取</h2>
       <label>文章链接</label>
       <input v-model="linkInput" placeholder="https://mp.weixin.qq.com/s/..." />
-      <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章，其他平台请手动粘贴正文。</p>
-      <button :disabled="fetching" @click="doFetch">{{ fetching ? '抓取中…' : '抓取并预填' }}</button>
+      <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章，其他平台请手动录入。</p>
+      <button class="primary" :disabled="ingesting" @click="doIngest">{{ ingesting ? '抓取中…' : '抓取并入库' }}</button>
       <p v-if="fetchErr" class="err">{{ fetchErr }}</p>
+      <p class="muted">抓到后自动写入基准库：标题、公众号名、发布日期、摘录。全文只在内存里用于打分，不落库。</p>
 
-      <template v-if="fetched">
-        <div class="card" style="background: var(--bg-soft)">
-          <h2>{{ fetched.title || '(未取到标题)' }}</h2>
-          <p class="muted">{{ fetched.author || '作者未知' }} · {{ fetched.publishedAt || '时间未知' }} · 正文 {{ fetched.chars }} 字</p>
-          <p class="muted">正文预览（前 200 字）：</p>
-          <div class="draft">{{ fetched.body.slice(0, 200) }}…</div>
-          <button class="primary" @click="applyFetched">填入下面的表单</button>
-        </div>
-        <p class="muted">抓到的全文只用于 AI 打分，不进数据库；入库的只有摘录。</p>
-      </template>
-      <p v-if="fetchHint" class="muted">{{ fetchHint }}</p>
+      <div v-if="lastIngested" class="card" style="background: var(--bg-soft)">
+        <p>刚刚入库：<strong>{{ lastIngested.title }}</strong></p>
+        <p class="muted">{{ lastIngested.author || '作者未知' }} · 正文 {{ lastIngested.chars }} 字</p>
+        <button @click="undoLast">撤销这次入库</button>
+      </div>
     </div>
 
     <div class="card">
       <h2>录入对标文章</h2>
+      <h2>手动录入（公众号抓不到 / 其他平台）</h2>
       <label>平台</label>
       <select v-model="form.platform">
         <option>公众号</option>
@@ -153,9 +171,8 @@ async function del(id: number) {
       <label>标签（文体,主题,场景；如：观点文,AI,技术科普）</label><input v-model="form.tags" />
       <label>效果数据（能看到才填，如 阅读2万 在看300）</label><input v-model="form.metrics" />
       <p class="err">{{ err }}</p>
-      <p v-if="confirmedUse" class="muted">本次内容来自链接抓取，请确认无误后再点入库。</p>
       <p class="muted">{{ info }}</p>
-      <button class="primary" @click="save">入库</button>
+      <button class="primary" @click="save">手动入库</button>
     </div>
 
     <div v-for="b in items" :key="b.id" class="card">
