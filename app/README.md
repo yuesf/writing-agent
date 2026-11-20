@@ -28,9 +28,8 @@
 内置 DeepSeek / MiniMax 两家（首版曾支持 9 家，已按主力两家收敛）。
 
 - 各家的 OpenAI 兼容端点写在 `src/core/providers.ts`，改地址只改这一个文件。
-- 模型列表来自 `GET {base_url}/models`，自动过滤 embedding / rerank / tts / whisper / image 等非对话模型。
-- 拉不到时的兜底：厂商不提供该端点（404/405）、返回空、或还没填 Key 时，用预设静态列表，仍可保存配置。
-- 模型名不在列表里时，点下拉旁边的「手动填写模型名」直接填（接口拉不到列表时也会自动切到手动输入）。
+- 模型列表**只能**来自 `GET {base_url}/models`，客户端不内置任何模型清单（内置的会过期，用户选到已下线的型号更难查）；自动过滤 embedding / rerank / tts / whisper / image 等非对话模型。
+- 拉不到（401/404/空返回）就把真实错误提示出来，下拉保持空并禁用；此时可点「手动填写模型名」自己输入型号。
 
 **为什么有一个 `core/http.ts`**：真机 WebView 的 origin 是 `https://localhost`，直连第三方 API 会被同源策略拦截（服务商不会为客户端开 CORS 头）。所以真机走 `CapacitorHttp` 原生栈（Bridge 自动注册，无需配置），浏览器开发态走 `fetch`。
 

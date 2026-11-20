@@ -16,7 +16,7 @@ const state = reactive<LlmDraft>({
   api_key: ''
 })
 
-const models = ref<string[]>(PROVIDERS[0].models)
+const models = ref<string[]>([])
 const loading = ref(false)
 const fetched = ref(false)
 const manualMode = ref(false)
@@ -34,9 +34,8 @@ function hydrate(init?: LlmDraft | null) {
   state.base_url = init.base_url || p?.base_url || ''
   state.model = init.model || ''
   state.api_key = init.api_key || ''
-  models.value = p?.models ?? []
-  // 已存的模型可能不在预设里（用户自选的型号），补进下拉，避免显示成空选项
-  if (state.model && !models.value.includes(state.model)) models.value = [state.model, ...models.value]
+  // 不预置候选：已存的型号单独放进来，保证下拉能显示出当前值，其余等接口拉
+  models.value = state.model ? [state.model] : []
   note.value = p?.note ?? ''
 }
 
@@ -48,7 +47,7 @@ function onProviderChange(e: Event) {
   state.provider = id
   state.base_url = p?.base_url ?? ''
   state.model = ''
-  models.value = p?.models ?? []
+  models.value = []
   fetched.value = false
   manualMode.value = false
   note.value = p?.note ?? ''
@@ -57,7 +56,6 @@ function onProviderChange(e: Event) {
 
 async function refresh() {
   err.value = ''
-  note.value = ''
   if (!state.base_url.trim()) {
     err.value = '接口地址为空：请先选择服务商'
     return
@@ -68,14 +66,14 @@ async function refresh() {
   }
   loading.value = true
   try {
-    const r = await loadModels(state.base_url, state.api_key, preset.value?.models ?? [])
+    const r = await loadModels(state.base_url, state.api_key)
     models.value = r.models
-    fetched.value = r.source === 'api'
+    fetched.value = true
     manualMode.value = false
     note.value = r.note
     if (!state.model || !r.models.includes(state.model)) state.model = r.models[0] ?? ''
   } catch (e: any) {
-    // 拉取失败不清空已有候选，用户仍可从内置列表里选
+    // 拉取失败就保持空列表，让用户看到真实原因，不用内置清单糊过去
     err.value = `获取模型列表失败：${String(e?.message ?? e)}`
   } finally {
     loading.value = false
@@ -114,12 +112,14 @@ defineExpose({
       </button>
     </div>
 
-    <input v-if="manualMode || !models.length" v-model="state.model" placeholder="手动填写模型名" />
-    <select v-else v-model="state.model">
-      <option value="">请选择模型</option>
+    <input v-if="manualMode" v-model="state.model" placeholder="手动填写模型名" />
+    <select v-else v-model="state.model" :disabled="!models.length">
+      <option value="">
+        {{ loading ? '获取中…' : models.length ? '请选择模型' : '请先点「获取模型列表」' }}
+      </option>
       <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
     </select>
-    <p v-if="models.length" class="muted">
+    <p class="muted">
       <button class="link" @click="manualMode = !manualMode">
         {{ manualMode ? '改从列表选择' : '手动填写模型名' }}
       </button>
