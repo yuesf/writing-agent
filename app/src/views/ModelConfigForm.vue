@@ -59,7 +59,7 @@ async function refresh() {
   err.value = ''
   note.value = ''
   if (!state.base_url.trim()) {
-    err.value = '接口地址为空：请选择服务商，或选择"自定义"后填写地址'
+    err.value = '接口地址为空：请先选择服务商'
     return
   }
   if (!state.api_key.trim()) {
@@ -93,6 +93,8 @@ defineExpose({
 
     <label>服务商</label>
     <select :value="state.provider" @change="onProviderChange">
+      <!-- 老配置里的服务商已下线时，保留一条只读项，避免下拉显示空白 -->
+      <option v-if="isCustom" :value="state.provider">自定义（旧配置）</option>
       <option v-for="p in PROVIDERS" :key="p.id" :value="p.id">{{ p.label }}</option>
     </select>
 

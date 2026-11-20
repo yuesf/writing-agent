@@ -25,12 +25,12 @@
 ## 模型配置与网络
 
 **配置流程**：选服务商 → 接口地址自动带出（不可手改）→ 填 API Key → 点「获取模型列表」→ 下拉选模型。
-内置 DeepSeek / MiniMax / Kimi / 智谱 GLM / 通义千问 / 火山方舟 / 硅基流动 / OpenAI / 自定义。
+内置 DeepSeek / MiniMax 两家（首版曾支持 9 家，已按主力两家收敛）。
 
 - 各家的 OpenAI 兼容端点写在 `src/core/providers.ts`，改地址只改这一个文件。
 - 模型列表来自 `GET {base_url}/models`，自动过滤 embedding / rerank / tts / whisper / image 等非对话模型。
 - 拉不到时的兜底：厂商不提供该端点（404/405）、返回空、或还没填 Key 时，用预设静态列表，仍可保存配置。
-- 需要手填模型名的场景：火山方舟的推理接入点 ID（`ep-` 开头）、中转站的私有模型名 —— 下拉旁边有「手动填写模型名」。
+- 模型名不在列表里时，点下拉旁边的「手动填写模型名」直接填（接口拉不到列表时也会自动切到手动输入）。
 
 **为什么有一个 `core/http.ts`**：真机 WebView 的 origin 是 `https://localhost`，直连第三方 API 会被同源策略拦截（服务商不会为客户端开 CORS 头）。所以真机走 `CapacitorHttp` 原生栈（Bridge 自动注册，无需配置），浏览器开发态走 `fetch`。
 

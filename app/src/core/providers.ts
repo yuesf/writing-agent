@@ -11,6 +11,8 @@ export interface ProviderPreset {
   note?: string
 }
 
+// 只保留 DeepSeek / MiniMax 两家。此处仅作旧配置的兜底标记，
+// 不再出现在服务商下拉里；老配置命中时会退化成可手填地址的自定义模式。
 export const CUSTOM_PROVIDER_ID = 'custom'
 
 export const PROVIDERS: ProviderPreset[] = [
@@ -24,51 +26,12 @@ export const PROVIDERS: ProviderPreset[] = [
     id: 'minimax',
     label: 'MiniMax',
     base_url: 'https://api.minimaxi.com/v1',
-    models: ['MiniMax-M2.7', 'MiniMax-M2.1', 'MiniMax-Text-01']
-  },
-  {
-    id: 'kimi',
-    label: '月之暗面 Kimi',
-    base_url: 'https://api.moonshot.cn/v1',
-    models: ['kimi-k2.5', 'moonshot-v1-256k', 'moonshot-v1-128k']
-  },
-  {
-    id: 'zhipu',
-    label: '智谱 GLM',
-    base_url: 'https://open.bigmodel.cn/api/paas/v4',
-    models: ['glm-5', 'glm-4.6', 'glm-4-flash']
-  },
-  {
-    id: 'qwen',
-    label: '通义千问（阿里云）',
-    base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    models: ['qwen3-max', 'qwen-plus', 'qwen-turbo']
-  },
-  {
-    id: 'volcengine',
-    label: '火山方舟（豆包）',
-    base_url: 'https://ark.cn-beijing.volces.com/api/v3',
-    models: [],
-    note: '火山方舟的模型名通常是推理接入点 ID（ep- 开头），请先在方舟控制台创建接入点再填写模型名。'
-  },
-  {
-    id: 'siliconflow',
-    label: '硅基流动 SiliconFlow',
-    base_url: 'https://api.siliconflow.cn/v1',
-    models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen3-235B-A22B-Instruct']
-  },
-  {
-    id: 'openai',
-    label: 'OpenAI',
-    base_url: 'https://api.openai.com/v1',
-    models: ['gpt-4o', 'gpt-4o-mini']
-  },
-  {
-    id: CUSTOM_PROVIDER_ID,
-    label: '自定义（中转站 / 自建服务）',
-    base_url: '',
-    models: [],
-    note: '填任何 OpenAI 兼容地址，如 https://your-gateway.com/v1。'
+    models: [
+      'MiniMax-M2.7', 'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.5', 'MiniMax-M2.5-highspeed',
+      'MiniMax-M2.1', 'MiniMax-M2'
+    ],
+    note: '国内站（platform.minimaxi.com）的 Key 配 api.minimaxi.com；国际站（platform.minimax.io）的 Key 要改成 api.minimax.io，混用会鉴权失败。'
   }
 ]
 
