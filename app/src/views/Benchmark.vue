@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { addBenchmark, addRubric, getLlmConfig, listBenchmarks, removeRow } from '../core/db'
 import { chatStream } from '../core/agent/llm'
-import { fetchWechatArticle } from '../core/benchmarkFetcher'
+import { fetchWechatArticle, pickWechatUrl } from '../core/benchmarkFetcher'
 import type { FetchedArticle } from '../core/benchmarkFetcher'
 import type { Benchmark } from '../core/types'
 
@@ -23,6 +23,9 @@ const fetchHint = ref('')
 const confirmedUse = ref(false)
 
 const RUBRIC_DIMS = ['信息密度', '结构清晰度', '开头钩子', '风格一致性', '观点锐度', '可读性']
+
+// 边输边判：粘错平台（知乎/小红书）当场提示，不必等点了抓取才发现
+const linkInvalid = computed(() => !!linkInput.value.trim() && pickWechatUrl(linkInput.value) === null)
 
 async function reload() {
   items.value = await listBenchmarks()
@@ -116,6 +119,7 @@ async function del(id: number) {
       <h2>从公众号链接抓取</h2>
       <label>文章链接</label>
       <input v-model="linkInput" placeholder="https://mp.weixin.qq.com/s/..." />
+      <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章，其他平台请手动粘贴正文。</p>
       <button :disabled="fetching" @click="doFetch">{{ fetching ? '抓取中…' : '抓取并预填' }}</button>
       <p v-if="fetchErr" class="err">{{ fetchErr }}</p>
 

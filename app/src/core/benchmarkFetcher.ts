@@ -49,10 +49,6 @@ export function pickWechatUrl(input: string): string | null {
   return m ? decodeEntities(m[0]) : null
 }
 
-export function isWechatLink(input: string): boolean {
-  return pickWechatUrl(input) !== null
-}
-
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
