@@ -93,16 +93,24 @@ async function mergeTags(asset: Asset, tags: string[]): Promise<void> {
   await updateAsset(asset.id, { tags: merged.slice(0, 12).join(',') })
 }
 
-// 质量分 = 该风格下文章的平均 Rubric 总分，写作时择优排序用（无分的按 0）
-async function refreshStyleQuality(): Promise<void> {
+// 质量分 = 该风格下文章的平均 Rubric 总分，写作时择优排序用（无分的按 0）。
+// 它依赖「文章 × Rubric」两样东西，所以打分、删文章、撤销入库之后都会过期。
+// 划分结束时调一次不够：全部归类后 pendingCount 归零、划分按钮禁用，用户没别的办法纠正，
+// 所以页面 reload 时也收敛一次（见 Benchmark.vue），保证择优用的分不会一直陈旧。
+export async function syncStyleQuality(): Promise<boolean> {
   const bms = await listBenchmarks()
   const styles = await listAssets({ type: 'style', source: 'benchmark' })
+  let changed = false
   for (const st of styles) {
     const group = bms.filter(b => b.style_id === st.id)
     const scored = group.map(b => rubricTotal(b.rubric)).filter(n => n > 0)
     const q = scored.length ? scored.reduce((a, b) => a + b, 0) / scored.length : 0
-    if (Math.abs((st.quality ?? 0) - q) > 0.01) await updateAsset(st.id, { quality: q })
+    if (Math.abs((st.quality ?? 0) - q) > 0.01) {
+      await updateAsset(st.id, { quality: q })
+      changed = true
+    }
   }
+  return changed
 }
 
 export async function clusterBenchmarkStyles(
@@ -148,7 +156,7 @@ export async function clusterBenchmarkStyles(
     }
   }
 
-  if (created || joined) await refreshStyleQuality()
+  if (created || joined) await syncStyleQuality()
 
   return { total: targets.length, created, joined, failed, samples: pool.length }
 }

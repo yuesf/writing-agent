@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { addBenchmark, addRubric, getLlmConfig, listAssets, listBenchmarks, removeRow } from '../core/db'
 import { chatStream } from '../core/agent/llm'
-import { clusterBenchmarkStyles, detachBenchmarkStyles, styleNameOf } from '../core/agent/styleCluster'
+import { clusterBenchmarkStyles, detachBenchmarkStyles, styleNameOf, syncStyleQuality } from '../core/agent/styleCluster'
 import { fetchWechatArticle, pickWechatUrl } from '../core/benchmarkFetcher'
 import type { Asset, Benchmark } from '../core/types'
 
@@ -51,6 +51,9 @@ const styleGroups = computed(() =>
 async function reload() {
   items.value = await listBenchmarks()
   styles.value = await listAssets({ type: 'style', source: 'benchmark' })
+  // 质量分 = 该风格下 Rubric 均值，打分/删文/撤销后都会过期。
+  // 全部归类后划分按钮是禁用的，用户没别的办法刷新，所以在这里统一收敛一次（幂等，无变化不写库）。
+  if (await syncStyleQuality()) styles.value = await listAssets({ type: 'style', source: 'benchmark' })
 }
 onMounted(reload)
 

@@ -49,17 +49,17 @@ label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px
   color: var(--muted);
 }
 .tabs button.active { color: var(--accent); font-weight: 500; }
-/* 页面内分段页签：与底部主导航 .tabs 区分，滚动时吸顶常驻 */
+/* 页面内分段页签：与底部主导航 .tabs 区分。
+   吸顶时做成通栏工具条（底色+下边框），否则滚过的卡片会从四周缝隙里透出来。 */
 .seg {
-  position: sticky; top: 8px; z-index: 5;
-  display: flex; gap: 4px; padding: 4px; margin: 0 12px 8px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  position: sticky; top: 0; z-index: 5;
+  display: flex; gap: 6px; padding: 6px 12px;
+  background: var(--bg); border-bottom: 1px solid var(--line);
 }
 .seg button {
-  flex: 1; border: none; background: none; padding: 8px 0;
-  font-size: 14px; color: var(--muted); border-radius: 7px;
+  flex: 1; padding: 8px 0; font-size: 14px; color: var(--muted); border-radius: 8px;
 }
-.seg button.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.seg button.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); font-weight: 500; }
 .seg .count { font-size: 12px; opacity: 0.75; margin-left: 4px; }
 .page { padding-bottom: 64px; min-height: 100vh; }
 .draft {
