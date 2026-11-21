@@ -23,6 +23,9 @@ const clustering = ref(false)
 const clusterMsg = ref('')
 const clusterErr = ref('')
 
+// 页面内两个页签：文章库（攒样本）/ 写作风格（归纳成可注入的写法）
+const pane = ref<'articles' | 'styles'>('articles')
+
 const RUBRIC_DIMS = ['信息密度', '结构清晰度', '开头钩子', '风格一致性', '观点锐度', '可读性']
 
 // 边输边判：粘错平台（知乎/小红书）当场提示，不必等点了抓取才发现
@@ -53,6 +56,13 @@ onMounted(reload)
 
 function sameUrl(a: string, b: string): boolean {
   return (a ?? '').trim() === (b ?? '').trim() && !!a
+}
+
+// 两个页签高度差很大，停在原滚动位置会落到空白处，切完统一回顶部
+function switchPane(p: 'articles' | 'styles') {
+  if (pane.value === p) return
+  pane.value = p
+  window.scrollTo({ top: 0 })
 }
 
 async function doIngest() {
@@ -181,66 +191,80 @@ async function del(id: number) {
       <p class="muted">
         公众号文章粘贴链接即抓取入库（单篇、你主动触发），抓取失败不入库，入库后可点「撤销」删掉刚写的那篇。
         目前只接公众号——知乎等平台需登录态，拿不到正文。
-        录入后 AI 跑两条管线：打 Rubric 分（质量门判别用）+ 风格分析入资产库（写作用）。
+        下面分两块：<b>文章库</b>攒样本（含 Rubric 打分），<b>写作风格</b>把样本归纳成可注入提示词的写法。
         建议覆盖不同作者、文体、热度层级。
       </p>
     </div>
 
-    <div class="card">
-      <h2>从公众号链接抓取</h2>
-      <label>文章链接</label>
-      <input v-model="linkInput" placeholder="https://mp.weixin.qq.com/s/..." />
-      <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章。</p>
-      <button class="primary" :disabled="ingesting" @click="doIngest">{{ ingesting ? '抓取中…' : '抓取并入库' }}</button>
-      <p v-if="fetchErr" class="err">{{ fetchErr }}</p>
-      <p v-if="info" class="muted">{{ info }}</p>
-      <p class="muted">抓到后自动写入基准库：标题、公众号名、发布日期、摘录。全文只在内存里用于打分，不落库。</p>
-
-      <div v-if="lastIngested" class="card" style="background: var(--bg-soft)">
-        <p>刚刚入库：<strong>{{ lastIngested.title }}</strong></p>
-        <p class="muted">{{ lastIngested.author || '作者未知' }} · 正文 {{ lastIngested.chars }} 字</p>
-        <button @click="undoLast">撤销这次入库</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>写作风格（自动划分）</h2>
-      <p class="muted">
-        按文体、语气、结构骨架、开头方式、句式节奏，把库里文章归到同一类写法下。能归入已有风格就归入，
-        明显不同族才新建——所以库越大，风格分得越准。写初稿时只注入 1 个风格档案（质量分最高的那个）。
-      </p>
-      <button class="primary" :disabled="clustering || !pendingCount" @click="runCluster">
-        {{ clustering ? '划分中…' : `自动划分风格（待划分 ${pendingCount} 篇）` }}
+    <nav class="seg">
+      <button :class="{ active: pane === 'articles' }" @click="switchPane('articles')">
+        文章库<span class="count">{{ items.length }}</span>
       </button>
-      <p v-if="clusterMsg" class="muted">{{ clusterMsg }}</p>
-      <p v-if="clusterErr" class="err">{{ clusterErr }}</p>
+      <button :class="{ active: pane === 'styles' }" @click="switchPane('styles')">
+        写作风格<span class="count">{{ styleGroups.length }}</span>
+      </button>
+    </nav>
 
-      <div v-for="g in styleGroups" :key="g.id" class="card" style="background: var(--bg-soft)">
-        <h2>{{ g.name }} <span class="pill">{{ g.members.length }} 篇</span></h2>
-        <p v-if="g.summary" class="muted">{{ g.summary }}</p>
-        <p class="muted">
-          质量分 {{ g.quality ? g.quality.toFixed(1) : '—' }}（该风格下 Rubric 总分均值，写作时择优用）
-        </p>
-        <p class="muted">篇目：{{ g.members.map(m => `《${m.title}》`).join('、') }}</p>
-        <button style="color: var(--warn)" @click="delStyle(g.id)">删除这个风格（文章保留）</button>
+    <template v-if="pane === 'articles'">
+      <div class="card">
+        <h2>从公众号链接抓取</h2>
+        <label>文章链接</label>
+        <input v-model="linkInput" placeholder="https://mp.weixin.qq.com/s/..." />
+        <p v-if="linkInvalid" class="muted">没识别到公众号链接——目前只支持 mp.weixin.qq.com 的文章。</p>
+        <button class="primary" :disabled="ingesting" @click="doIngest">{{ ingesting ? '抓取中…' : '抓取并入库' }}</button>
+        <p v-if="fetchErr" class="err">{{ fetchErr }}</p>
+        <p v-if="info" class="muted">{{ info }}</p>
+        <p class="muted">抓到后自动写入基准库：标题、公众号名、发布日期、摘录。全文只在内存里用于打分，不落库。</p>
+
+        <div v-if="lastIngested" class="card" style="background: var(--bg-soft)">
+          <p>刚刚入库：<strong>{{ lastIngested.title }}</strong></p>
+          <p class="muted">{{ lastIngested.author || '作者未知' }} · 正文 {{ lastIngested.chars }} 字</p>
+          <button @click="undoLast">撤销这次入库</button>
+        </div>
       </div>
-      <p v-if="!styleGroups.length && items.length" class="muted">还没有风格档案，点上面的按钮开始划分。</p>
-    </div>
 
-    <p v-if="err" class="err">{{ err }}</p>
-    <p v-if="!items.length" class="muted">基准库还是空的：先粘一篇公众号文章链接抓进来，攒够几篇再划分风格。</p>
+      <p v-if="err" class="err">{{ err }}</p>
+      <p v-if="!items.length" class="muted">基准库还是空的：先粘一篇公众号文章链接抓进来，攒够几篇再划分风格。</p>
 
-    <div v-for="b in items" :key="b.id" class="card">
-      <h2>
-        {{ b.title }}
-        <span class="pill">{{ b.platform }}</span>
-        <span v-if="b.style_name" class="pill">{{ b.style_name }}</span>
-        <span v-else class="pill">未归类</span>
-      </h2>
-      <p class="muted">{{ b.author }} · {{ b.published_at }} · 标签 {{ b.tags || '无' }}</p>
-      <p class="muted">{{ b.rubric ? 'Rubric：' + b.rubric : '未打分' }}</p>
-      <button @click="score(b)">AI 打分</button>
-      <button style="color: var(--warn)" @click="del(b.id)">删除</button>
-    </div>
+      <div v-for="b in items" :key="b.id" class="card">
+        <h2>
+          {{ b.title }}
+          <span class="pill">{{ b.platform }}</span>
+          <span v-if="b.style_name" class="pill">{{ b.style_name }}</span>
+          <span v-else class="pill">未归类</span>
+        </h2>
+        <p class="muted">{{ b.author }} · {{ b.published_at }} · 标签 {{ b.tags || '无' }}</p>
+        <p class="muted">{{ b.rubric ? 'Rubric：' + b.rubric : '未打分' }}</p>
+        <button @click="score(b)">AI 打分</button>
+        <button style="color: var(--warn)" @click="del(b.id)">删除</button>
+      </div>
+    </template>
+
+    <template v-else>
+      <div class="card">
+        <h2>写作风格（自动划分）</h2>
+        <p class="muted">
+          按文体、语气、结构骨架、开头方式、句式节奏，把库里文章归到同一类写法下。能归入已有风格就归入，
+          明显不同族才新建——所以库越大，风格分得越准。写初稿时只注入 1 个风格档案（质量分最高的那个）。
+        </p>
+        <p v-if="!items.length" class="muted">还没有文章。先去「文章库」抓几篇，再回来划分。</p>
+        <button class="primary" :disabled="clustering || !pendingCount" @click="runCluster">
+          {{ clustering ? '划分中…' : `自动划分风格（待划分 ${pendingCount} 篇）` }}
+        </button>
+        <p v-if="clusterMsg" class="muted">{{ clusterMsg }}</p>
+        <p v-if="clusterErr" class="err">{{ clusterErr }}</p>
+
+        <div v-for="g in styleGroups" :key="g.id" class="card" style="background: var(--bg-soft)">
+          <h2>{{ g.name }} <span class="pill">{{ g.members.length }} 篇</span></h2>
+          <p v-if="g.summary" class="muted">{{ g.summary }}</p>
+          <p class="muted">
+            质量分 {{ g.quality ? g.quality.toFixed(1) : '—' }}（该风格下 Rubric 总分均值，写作时择优用）
+          </p>
+          <p class="muted">篇目：{{ g.members.map(m => `《${m.title}》`).join('、') }}</p>
+          <button style="color: var(--warn)" @click="delStyle(g.id)">删除这个风格（文章保留）</button>
+        </div>
+        <p v-if="!styleGroups.length && items.length" class="muted">还没有风格档案，点上面的按钮开始划分。</p>
+      </div>
+    </template>
   </div>
 </template>

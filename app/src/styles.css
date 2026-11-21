@@ -1,5 +1,6 @@
 :root {
   --bg: #f6f6f4;
+  --bg-soft: #fbfbf9;
   --card: #ffffff;
   --ink: #222222;
   --muted: #777771;
@@ -48,6 +49,18 @@ label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px
   color: var(--muted);
 }
 .tabs button.active { color: var(--accent); font-weight: 500; }
+/* 页面内分段页签：与底部主导航 .tabs 区分，滚动时吸顶常驻 */
+.seg {
+  position: sticky; top: 8px; z-index: 5;
+  display: flex; gap: 4px; padding: 4px; margin: 0 12px 8px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+}
+.seg button {
+  flex: 1; border: none; background: none; padding: 8px 0;
+  font-size: 14px; color: var(--muted); border-radius: 7px;
+}
+.seg button.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.seg .count { font-size: 12px; opacity: 0.75; margin-left: 4px; }
 .page { padding-bottom: 64px; min-height: 100vh; }
 .draft {
   white-space: pre-wrap; background: var(--accent-soft); border-radius: 8px;
